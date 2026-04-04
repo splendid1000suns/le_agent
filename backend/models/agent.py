@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from models.policy import Policy
+
 
 class AgentCreate(BaseModel):
     name: str
@@ -7,8 +9,17 @@ class AgentCreate(BaseModel):
     image_uri: str | None = None
     strategy_type: str  # "PRICE_ACTION" | "POLYMARKET" | "X_SENTIMENT"
     strategy_prompt: str
-    policy: dict
+    policy: Policy
 
+
+class AgentUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    image_uri: str | None = None
+    strategy_type: str | None = None
+    strategy_prompt: str | None = None
+    policy: Policy | None = None
+    active: bool | None = None
 
 
 class AgentResponse(BaseModel):
@@ -21,6 +32,6 @@ class AgentResponse(BaseModel):
     strategy_prompt: str
     active: bool
     status: dict | None
-    policy: dict | None
+    policy: Policy | None
 
     model_config = {"from_attributes": True}

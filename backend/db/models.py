@@ -1,5 +1,3 @@
-from pydantic import BaseModel
-
 from sqlalchemy import (
     DECIMAL,
     JSON,
@@ -73,8 +71,8 @@ class Policy(BaseModel):
 tokens: list[str] # whitelisted token addresses
 contracts: list[str] # whitelisted contract addresses (e.g. Uniswap router)
 price_range: dict[
-str, tuple[int, int]
+str, tuple[Decimal(16 decimmal points, Decimal(16 decimmal points)]
 ] # token_address -> (min_price, max_price) in USD # only trade this token if price is within range # omit a token to skip price check for it, if no price range is provided for a token, trade at any range
-tx_amount_limit: int # max number of trades per 24h
-tx_value_limit: int # in USD equivalent, hard cap per single trade
+rate_limit_24h: int # max number of trades per 24h
+value_limit_24h: int # in USD equivalent, hard cap per single trade
 """
