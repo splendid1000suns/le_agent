@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth";
 import { getAgents, ApiError } from "@/lib/api";
 import type { Agent } from "@/lib/types";
+import { CreateAgentModal } from "@/components/CreateAgentModal";
 
 function AgentTile({ agent }: { agent: Agent }) {
   const initials = agent.name
@@ -122,6 +124,7 @@ function AddTile({ onClick }: { onClick?: () => void }) {
 
 export default function AgentsPage() {
   const { token, signOut } = useAuth();
+  const [creating, setCreating] = useState(false);
 
   const {
     data: agents = [],
@@ -153,13 +156,16 @@ export default function AgentsPage() {
   }
 
   return (
-    <div className="flex flex-1 flex-col p-6">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-        {agents.map((agent) => (
-          <AgentTile key={agent.id} agent={agent} />
-        ))}
-        <AddTile onClick={() => {/* TODO: open create agent modal */}} />
+    <>
+      <div className="flex flex-1 flex-col p-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          {agents.map((agent) => (
+            <AgentTile key={agent.id} agent={agent} />
+          ))}
+          <AddTile onClick={() => setCreating(true)} />
+        </div>
       </div>
-    </div>
+      <CreateAgentModal open={creating} onClose={() => setCreating(false)} />
+    </>
   );
 }

@@ -1,7 +1,7 @@
-'use client'
+"use client";
 
 interface AddAgentButtonProps {
-  onClick?: () => void
+  onClick?: () => void;
 }
 
 export function AddAgentButton({ onClick }: AddAgentButtonProps) {
@@ -13,7 +13,7 @@ export function AddAgentButton({ onClick }: AddAgentButtonProps) {
     >
       <div
         className="w-24 h-24 rounded-full flex items-center justify-center transition-transform duration-200 group-hover:scale-105"
-        style={{ backgroundColor: '#EA6189' }}
+        style={{ backgroundColor: "#EA6189" }}
       >
         <svg
           width="36"
@@ -31,10 +31,10 @@ export function AddAgentButton({ onClick }: AddAgentButtonProps) {
       </div>
       <span
         className="text-sm tracking-widest uppercase"
-        style={{ color: '#EA6189' }}
+        style={{ color: "#EA6189" }}
       >
         Add Agent
       </span>
     </button>
-  )
+  );
 }

@@ -92,6 +92,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => setMounted(true), []);
 
+  useEffect(() => {
+    document.body.classList.remove("light", "dark");
+    document.body.classList.add(theme);
+  }, [theme]);
+
   if (!mounted) return null;
   if (!isConnected) return <ConnectGate />;
   if (!token) return <SignInGate />;
