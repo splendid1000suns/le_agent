@@ -7,6 +7,7 @@ import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAuth } from "@/lib/auth";
 import Image from "next/image";
+import Link from "next/link";
 
 function ConnectGate() {
   const [theme, setTheme] = useState<"dark" | "light">("light");
@@ -132,7 +133,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Top bar */}
         <header className="flex items-center h-14 px-4 border-b border-zinc-800 shrink-0">
           <div className="flex items-center gap-3 flex-1">
-            <Image src={logoSrc} alt="LeAgent" width={80} height={24} className="shrink-0 mt-1" />
+            <Link href="/agents">
+              <Image src={logoSrc} alt="LeAgent" width={80} height={24} className="shrink-0 mt-1" />
+            </Link>
             {title && (
               <span className="text-2xl tracking-widest uppercase ml-2">
                 Le<span style={{ color: "#EA6189" }}>{title}</span>
