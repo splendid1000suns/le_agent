@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { AppLayout } from "@/components/AppLayout";
+import { Providers } from "./providers";
 import "./globals.css";
 
 const grMileston = localFont({
@@ -31,7 +32,9 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${grMileston.variable} h-full antialiased`}>
       <body className="h-full">
-        <AppLayout>{children}</AppLayout>
+        <Providers>
+          <AppLayout>{children}</AppLayout>
+        </Providers>
       </body>
     </html>
   );
