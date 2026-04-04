@@ -6,7 +6,7 @@ from pydantic import BaseModel
 
 class TradeResponse(BaseModel):
     tx_hash: str
-    agent_id: int
+    agent_name: str
     token_in: str
     token_out: str
     amount_in: Decimal
