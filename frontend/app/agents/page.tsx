@@ -58,8 +58,8 @@ function AgentTile({ agent }: { agent: Agent }) {
           <span
             className="w-1.5 h-1.5 rounded-full block"
             style={{
-              backgroundColor: agent.active ? "#4ade80" : "#6b7280",
-              boxShadow: agent.active ? "0 0 6px #4ade80" : "none",
+              backgroundColor: agent.running ? "#4ade80" : "#6b7280",
+              boxShadow: agent.running ? "0 0 6px #4ade80" : "none",
             }}
           />
         </div>

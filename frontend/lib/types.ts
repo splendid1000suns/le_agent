@@ -14,12 +14,13 @@ export type Policy = {
 
 export type Agent = {
   name: string
+  ens_name: string
   owner: string
+  wallet: string
   description: string | null
   image_uri: string | null
   strategy: string
-  active: boolean
-  status: Record<string, unknown> | null
+  running: boolean
   policy: Policy | null
 }
 
@@ -34,12 +35,10 @@ export type AgentCreate = {
 
 export type AgentUpdate = {
   record_sig: string
-  name?: string
   description?: string | null
   image_uri?: string | null
   strategy?: string
   policy?: Policy
-  active?: boolean
 }
 
 export type Trade = {

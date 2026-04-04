@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSignMessage } from "wagmi";
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import {
@@ -11,10 +10,12 @@ import {
   getAgentTrades,
   updateAgent,
   deleteAgent,
+  startAgent,
+  stopAgent,
   ApiError,
 } from "@/lib/api";
 import type { Agent, Trade, Policy } from "@/lib/types";
-import { CreateAgentModal, EMPTY_POLICY, buildRecordPayload } from "@/components/CreateAgentModal";
+import { CreateAgentModal, EMPTY_POLICY } from "@/components/CreateAgentModal";
 import { PolicyDisplay } from "@/components/PolicyDisplay";
 
 /* ── Active toggle ────────────────────────────────────────────── */
@@ -226,7 +227,6 @@ export default function AgentDetailPage() {
   const { token, signOut } = useAuth();
   const queryClient = useQueryClient();
 
-  const { signMessageAsync } = useSignMessage();
   const [editing, setEditing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
@@ -261,26 +261,16 @@ export default function AgentDetailPage() {
   });
 
   const toggleMutation = useMutation({
-    mutationFn: async (active: boolean) => {
-      const sigPayload = buildRecordPayload(
-        agent!.name, agent!.strategy, agent!.policy ?? EMPTY_POLICY,
-        agent!.description, agent!.image_uri,
-      );
-      const record_sig = await signMessageAsync({ message: sigPayload });
-      return updateAgent(token!, name, { active, record_sig });
-    },
-    onMutate: async (active) => {
+    mutationFn: (running: boolean) =>
+      running ? startAgent(token!, name) : stopAgent(token!, name),
+    onMutate: async (running) => {
       await queryClient.cancelQueries({ queryKey: ["agent", name] });
       const prev = queryClient.getQueryData<Agent>(["agent", name, token]);
-      queryClient.setQueryData(["agent", name, token], (old: Agent) => ({
-        ...old,
-        active,
-      }));
+      queryClient.setQueryData(["agent", name, token], (old: Agent) => ({ ...old, running }));
       return { prev };
     },
-    onError: (_err, _active, ctx) => {
-      if (ctx?.prev)
-        queryClient.setQueryData(["agent", name, token], ctx.prev);
+    onError: (_err, _running, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(["agent", name, token], ctx.prev);
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["agent", name] });
@@ -404,23 +394,19 @@ export default function AgentDetailPage() {
                 <span
                   className="flex items-center gap-1.5 text-[10px] tracking-[0.2em] uppercase px-2.5 py-1 rounded-full border"
                   style={{
-                    color: agent.active ? "#4ade80" : "var(--text-muted)",
-                    borderColor: agent.active
-                      ? "rgba(74,222,128,0.3)"
-                      : "rgba(107,114,128,0.3)",
-                    backgroundColor: agent.active
-                      ? "rgba(74,222,128,0.08)"
-                      : "transparent",
+                    color: agent.running ? "#4ade80" : "var(--text-muted)",
+                    borderColor: agent.running ? "rgba(74,222,128,0.3)" : "rgba(107,114,128,0.3)",
+                    backgroundColor: agent.running ? "rgba(74,222,128,0.08)" : "transparent",
                   }}
                 >
                   <span
                     className="w-1 h-1 rounded-full"
                     style={{
-                      backgroundColor: agent.active ? "#4ade80" : "#6b7280",
-                      boxShadow: agent.active ? "0 0 4px #4ade80" : "none",
+                      backgroundColor: agent.running ? "#4ade80" : "#6b7280",
+                      boxShadow: agent.running ? "0 0 4px #4ade80" : "none",
                     }}
                   />
-                  {agent.active ? "Active" : "Inactive"}
+                  {agent.running ? "Running" : "Stopped"}
                 </span>
               </div>
             </div>
@@ -428,7 +414,7 @@ export default function AgentDetailPage() {
             {/* Action controls */}
             <div className="flex items-center gap-3 shrink-0 mt-1">
               <ActiveToggle
-                active={agent.active}
+                active={agent.running}
                 onChange={(v) => toggleMutation.mutate(v)}
                 disabled={toggleMutation.isPending}
               />
@@ -501,20 +487,6 @@ export default function AgentDetailPage() {
               </Section>
             )}
 
-            {agent.status && Object.keys(agent.status).length > 0 && (
-              <Section label="Status">
-                <pre
-                  className="text-xs leading-relaxed overflow-x-auto rounded-xl p-3"
-                  style={{
-                    backgroundColor: "rgba(234,97,137,0.05)",
-                    color: "var(--text-muted)",
-                    border: "1px solid rgba(234,97,137,0.1)",
-                  }}
-                >
-                  {JSON.stringify(agent.status, null, 2)}
-                </pre>
-              </Section>
-            )}
           </div>
 
           {/* Trades */}

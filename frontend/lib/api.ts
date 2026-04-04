@@ -103,6 +103,20 @@ export async function deleteAgent(token: string, name: string): Promise<void> {
   });
 }
 
+export async function startAgent(token: string, name: string): Promise<void> {
+  return reqVoid(`/agents/${encodeURIComponent(name)}/start`, {
+    method: "POST",
+    headers: bearer(token),
+  });
+}
+
+export async function stopAgent(token: string, name: string): Promise<void> {
+  return reqVoid(`/agents/${encodeURIComponent(name)}/stop`, {
+    method: "POST",
+    headers: bearer(token),
+  });
+}
+
 export async function getAgentTrades(
   token: string,
   name: string,
