@@ -7,10 +7,9 @@ from web3 import Web3
 from utils.keys import derive_pkey
 
 API_URL = "https://trade-api.gateway.uniswap.org/v1"
-HEADERS = {
-    "Content-Type": "application/json",
-    "x-universal-router-version": "2.0",
-}
+
+# Reused across all requests — connection pool is kept alive
+_http = httpx.AsyncClient(base_url=API_URL)
 
 # Minimal ABI — only the function the agent wallet calls on LeAgentExecutor
 EXECUTOR_ABI = [
@@ -29,17 +28,31 @@ EXECUTOR_ABI = [
     }
 ]
 
+_headers: dict[str, str] | None = None
 
-def _headers() -> dict[str, str]:
-    return {**HEADERS, "x-api-key": os.environ["UNISWAP_API_KEY"]}
+
+def _get_headers() -> dict[str, str]:
+    global _headers
+    if _headers is None:
+        _headers = {
+            "Content-Type": "application/json",
+            "x-universal-router-version": "2.0",
+            "x-api-key": os.environ["UNISWAP_API_KEY"],
+        }
+    return _headers
+
+
+_w3: Web3 | None = None
 
 
 def _get_w3() -> Web3:
-    rpc = os.environ["WEB3_RPC_URL"]
-    w3 = Web3(Web3.HTTPProvider(rpc))
-    if not w3.is_connected():
-        raise RuntimeError(f"Cannot connect to RPC: {rpc}")
-    return w3
+    global _w3
+    if _w3 is None:
+        rpc = os.environ["WEB3_RPC_URL"]
+        _w3 = Web3(Web3.HTTPProvider(rpc))
+        if not _w3.is_connected():
+            raise RuntimeError(f"Cannot connect to RPC: {rpc}")
+    return _w3
 
 
 def _sign_and_send(w3: Web3, tx: dict, private_key: str) -> str:
@@ -55,19 +68,18 @@ async def check_approval(
     chain_id: int = 1,
 ) -> dict | None:
     """Check if a token is approved for the Trading API. Returns approval tx data or None."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            f"{API_URL}/check_approval",
-            headers=_headers(),
-            json={
-                "walletAddress": wallet_address,
-                "token": token,
-                "amount": amount,
-                "chainId": chain_id,
-            },
-        )
-        resp.raise_for_status()
-        return resp.json().get("approval")
+    resp = await _http.post(
+        "/check_approval",
+        headers=_get_headers(),
+        json={
+            "walletAddress": wallet_address,
+            "token": token,
+            "amount": amount,
+            "chainId": chain_id,
+        },
+    )
+    resp.raise_for_status()
+    return resp.json().get("approval")
 
 
 async def get_quote(
@@ -94,16 +106,13 @@ async def get_quote(
     if recipient:
         body["recipient"] = recipient
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{API_URL}/quote", headers=_headers(), json=body)
-        resp.raise_for_status()
-        return resp.json()
+    resp = await _http.post("/quote", headers=_get_headers(), json=body)
+    resp.raise_for_status()
+    return resp.json()
 
 
 def _prepare_swap_request(quote_response: dict) -> dict:
-    """Strip permitData/permitTransaction for smart-contract (legacy approval) flow."""
-    # Contracts can't sign EIP-712, so we always use the legacy approval path.
-    # The contract does tokenIn.approve(router) itself before calling the swap.
+    # Strip permitData — contracts can't sign EIP-712, router approval is done in executeSwap()
     return {k: v for k, v in quote_response.items() if k not in ("permitData", "permitTransaction")}
 
 
@@ -132,30 +141,29 @@ async def execute_swap(
     agent_account = Account.from_key(private_key)
     contract_address = Web3.to_checksum_address(contract_address)
     owner_address = Web3.to_checksum_address(owner_address)
-    amount_str = str(amount_in_wei)
 
-    # 1. Quote: contract is the swapper (has the tokens), owner is the recipient
+    # Quote: contract is the swapper (has the tokens), owner is the recipient
     quote_response = await get_quote(
         swapper=contract_address,
         token_in=token_in,
         token_out=token_out,
-        amount=amount_str,
+        amount=str(amount_in_wei),
         chain_id=chain_id,
         recipient=owner_address,
     )
 
-    # 2. Get swap calldata
-    swap_request = _prepare_swap_request(quote_response)
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(f"{API_URL}/swap", headers=_headers(), json=swap_request)
-        resp.raise_for_status()
-        swap_data = resp.json()
+    # Get swap calldata
+    resp = await _http.post(
+        "/swap",
+        headers=_get_headers(),
+        json=_prepare_swap_request(quote_response),
+    )
+    resp.raise_for_status()
+    swap_tx = resp.json()["swap"]
 
-    swap_tx = swap_data["swap"]
     if not swap_tx.get("data") or swap_tx["data"] in ("", "0x"):
         raise RuntimeError("Empty swap data — quote may have expired")
 
-    # 3. Encode call to contract.executeSwap(tokenIn, amountIn, swapTarget, swapValue, swapData)
     executor = w3.eth.contract(address=contract_address, abi=EXECUTOR_ABI)
     calldata = executor.encodeABI(
         fn_name="executeSwap",
@@ -168,7 +176,6 @@ async def execute_swap(
         ],
     )
 
-    # 4. Agent wallet sends tx to the contract (pays gas only, never touches tokens)
     tx = {
         "to": contract_address,
         "from": agent_account.address,
