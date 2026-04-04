@@ -6,26 +6,21 @@ import { Sun, Moon } from "lucide-react";
 import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAuth } from "@/lib/auth";
+import { useTheme } from "@/app/providers";
 import Image from "next/image";
 import Link from "next/link";
 
 function ConnectGate() {
-  const [theme, setTheme] = useState<"dark" | "light">("light");
-  useEffect(() => {
-    document.documentElement.classList.remove("dark", "light");
-    document.documentElement.classList.add(theme);
-  }, [theme]);
+  const { theme, toggleTheme } = useTheme();
   const logoSrc =
     theme === "dark"
       ? "/main logo long white.svg"
       : "/main logo long black.svg";
 
   return (
-    <div
-      className={`${theme} flex h-full min-h-screen flex-col items-center justify-center gap-10 bg-[var(--bg)]`}
-    >
+    <div className="flex h-full min-h-screen flex-col items-center justify-center gap-10 bg-[var(--bg)]">
       <button
-        onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+        onClick={toggleTheme}
         className="absolute top-4 right-4 text-[var(--icon)] hover:text-[var(--text)] transition-colors cursor-pointer"
         aria-label="Toggle theme"
       >
@@ -35,7 +30,7 @@ function ConnectGate() {
       <Image src={logoSrc} alt="LeAgent" width={200} height={48} priority />
 
       <div className="flex flex-col items-center gap-3">
-        <p className="text-sm tracking-widest uppercase text-[var(--text-muted)]">
+        <p className="text-sm tracking-widest uppercase text-[var(--text)]" style={{ opacity: 0.8 }}>
           Connect your wallet to continue
         </p>
         <ConnectButton />
@@ -45,11 +40,7 @@ function ConnectGate() {
 }
 
 function SignInGate() {
-  const [theme, setTheme] = useState<"dark" | "light">("light");
-  useEffect(() => {
-    document.documentElement.classList.remove("dark", "light");
-    document.documentElement.classList.add(theme);
-  }, [theme]);
+  const { theme, toggleTheme } = useTheme();
   const { signIn, isAuthenticating, error } = useAuth();
   const logoSrc =
     theme === "dark"
@@ -57,11 +48,9 @@ function SignInGate() {
       : "/main logo long black.svg";
 
   return (
-    <div
-      className={`${theme} flex h-full min-h-screen flex-col items-center justify-center gap-10 bg-[var(--bg)]`}
-    >
+    <div className="flex h-full min-h-screen flex-col items-center justify-center gap-10 bg-[var(--bg)]">
       <button
-        onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+        onClick={toggleTheme}
         className="absolute top-4 right-4 text-[var(--icon)] hover:text-[var(--text)] transition-colors cursor-pointer"
         aria-label="Toggle theme"
       >
@@ -71,8 +60,8 @@ function SignInGate() {
       <Image src={logoSrc} alt="LeAgent" width={200} height={48} priority />
 
       <div className="flex flex-col items-center gap-3">
-        <p className="text-sm tracking-widest uppercase text-[var(--text-muted)]">
-          Sign a message to authenticate
+        <p className="text-sm tracking-widest uppercase text-[var(--text)]" style={{ opacity: 0.8 }}>
+          Sign a message to authenticate your ledger
         </p>
         <button
           onClick={signIn}
@@ -93,16 +82,11 @@ function SignInGate() {
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { address, isConnected } = useAccount();
   const { token } = useAuth();
-  const [theme, setTheme] = useState<"dark" | "light">("light");
+  const { theme, toggleTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => setMounted(true), []);
-
-  useEffect(() => {
-    document.documentElement.classList.remove("dark", "light");
-    document.documentElement.classList.add(theme);
-  }, [theme]);
 
   if (!mounted) return null;
   if (!isConnected) return <ConnectGate />;
@@ -136,15 +120,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             <Link href="/agents">
               <Image src={logoSrc} alt="LeAgent" width={80} height={24} className="shrink-0 mt-1" />
             </Link>
-            {title && (
-              <span className="text-2xl tracking-widest uppercase ml-2">
-                Le<span style={{ color: "#EA6189" }}>{title}</span>
-              </span>
-            )}
           </div>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              onClick={toggleTheme}
               className="text-[var(--icon)] hover:text-[var(--text)] transition-colors cursor-pointer"
               aria-label="Toggle theme"
             >
