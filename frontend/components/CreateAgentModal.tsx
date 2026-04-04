@@ -735,6 +735,33 @@ function ContractSelector({
 
 /* ── Triggers editor ──────────────────────────────────────────── */
 
+type PolymarketMarket = {
+  question: string;
+  clobTokenIds: string | string[];
+  lastTradePrice: number | null;
+  image: string | null;
+};
+
+async function searchPolymarkets(q: string): Promise<PolymarketMarket[]> {
+  const res = await fetch(`/api/polymarket-search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  const markets: PolymarketMarket[] = [];
+  for (const event of data.events ?? []) {
+    for (const market of event.markets ?? []) {
+      if (market.clobTokenIds && market.question) {
+        markets.push({
+          question: market.question,
+          clobTokenIds: market.clobTokenIds,
+          lastTradePrice: market.lastTradePrice ?? null,
+          image: market.image ?? null,
+        });
+      }
+    }
+  }
+  return markets.slice(0, 10);
+}
+
 function TriggersEditor({
   triggers,
   onChange,
@@ -742,54 +769,197 @@ function TriggersEditor({
   triggers: PolymarketTrigger[];
   onChange: (v: PolymarketTrigger[]) => void;
 }) {
+  const [adding, setAdding] = useState(false);
+  const [search, setSearch] = useState("");
+  const [results, setResults] = useState<PolymarketMarket[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState<PolymarketMarket | null>(null);
+  const [threshold, setThreshold] = useState(50);
+  const [gt, setGt] = useState(true);
+
+  useEffect(() => {
+    if (search.length < 3) { setResults([]); return; }
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try { setResults(await searchPolymarkets(search)); }
+      finally { setSearching(false); }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  function reset() {
+    setAdding(false);
+    setSearch("");
+    setResults([]);
+    setSelected(null);
+    setThreshold(50);
+    setGt(true);
+  }
+
+  function confirm() {
+    if (!selected) return;
+    const raw = selected.clobTokenIds;
+    const ids: string[] = Array.isArray(raw)
+      ? (raw as unknown as string[])
+      : JSON.parse(raw);
+    const token_id = String(ids[0]);
+    onChange([...triggers, { token_id, threshold: threshold / 100, gt }]);
+    reset();
+  }
+
   function remove(i: number) {
     onChange(triggers.filter((_, idx) => idx !== i));
   }
 
   return (
     <Field label="Polymarket Triggers">
+      {/* Existing triggers */}
       {triggers.length > 0 && (
-        <div className="flex flex-col gap-1.5 mb-2">
+        <div className="flex flex-col gap-1.5">
           {triggers.map((t, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]"
-              style={{
-                backgroundColor: "var(--bg)",
-                border: "1px solid rgba(234,97,137,0.12)",
-              }}
-            >
-              <span className="font-mono text-[var(--text-muted)]">
-                #{t.token_id}
-              </span>
+            <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]" style={{ backgroundColor: "var(--bg)", border: "1px solid rgba(234,97,137,0.12)" }}>
+              <span className="font-mono text-[10px] truncate text-[var(--text-muted)]" style={{ maxWidth: 120 }}>{t.token_id}</span>
               <span style={{ color: "#EA6189" }}>{t.gt ? ">" : "≤"}</span>
-              <span className="text-[var(--text)]">{t.threshold}</span>
-              <button
-                type="button"
-                onClick={() => remove(i)}
-                className="ml-auto text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
-              >
+              <span className="text-[var(--text)]">{(t.threshold * 100).toFixed(0)}%</span>
+              <button type="button" onClick={() => remove(i)} className="ml-auto text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
                 <X size={11} />
               </button>
             </div>
           ))}
         </div>
       )}
-      <button
-        type="button"
-        onClick={() =>
-          onChange([...triggers, { token_id: "", threshold: 0.5, gt: true }])
-        }
-        className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] tracking-widest uppercase transition-all"
-        style={{
-          border: "1px dashed rgba(234,97,137,0.25)",
-          color: "var(--text-muted)",
-          width: "100%",
-        }}
-      >
-        <Plus size={11} />
-        Add Polymarket Trigger
-      </button>
+
+      {/* Add trigger form */}
+      {adding ? (
+        <div className="flex flex-col gap-3 p-3 rounded-xl" style={{ border: "1px solid rgba(234,97,137,0.2)", backgroundColor: "var(--bg)" }}>
+          {!selected ? (
+            /* Step 1: search */
+            <div className="relative">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ backgroundColor: "var(--surface)", border: "1px solid rgba(234,97,137,0.15)" }}>
+                <Search size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+                <input
+                  autoFocus
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search Polymarket markets…"
+                  className="flex-1 bg-transparent outline-none text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]"
+                />
+                {searching && <span className="text-[10px] text-[var(--text-muted)]">…</span>}
+              </div>
+              {search.length < 3 && (
+                <p className="text-[10px] mt-1.5" style={{ color: "var(--text-muted)" }}>Type at least 3 characters to search</p>
+              )}
+              {results.length > 0 && (
+                <div className="absolute z-10 left-0 right-0 mt-1 rounded-xl overflow-hidden overflow-y-auto" style={{ maxHeight: 240, backgroundColor: "var(--surface)", border: "1px solid rgba(234,97,137,0.15)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+                  {results.map((m, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => { setSelected(m); setResults([]); }}
+                      className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-[var(--bg)]"
+                    >
+                      {m.image && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={m.image} alt="" width={24} height={24} className="rounded shrink-0 mt-0.5 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                      )}
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="text-xs text-[var(--text)] leading-snug line-clamp-2">{m.question}</span>
+                        {m.lastTradePrice != null && (
+                          <span className="text-[10px]" style={{ color: "#EA6189" }}>
+                            {(m.lastTradePrice * 100).toFixed(1)}% YES
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!searching && search.length >= 3 && results.length === 0 && (
+                <p className="text-[10px] mt-1.5" style={{ color: "var(--text-muted)" }}>No markets found</p>
+              )}
+            </div>
+          ) : (
+            /* Step 2: configure threshold */
+            <div className="flex flex-col gap-3">
+              <div className="flex items-start gap-2">
+                {selected.image && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={selected.image} alt="" width={28} height={28} className="rounded shrink-0 mt-0.5 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                )}
+                <p className="text-xs text-[var(--text)] leading-snug">{selected.question}</p>
+                <button type="button" onClick={() => setSelected(null)} className="ml-auto text-[var(--text-muted)] hover:text-[var(--text)] transition-colors shrink-0">
+                  <X size={11} />
+                </button>
+              </div>
+
+              {/* Direction toggle */}
+              <div className="flex gap-2">
+                {[true, false].map((v) => (
+                  <button
+                    key={String(v)}
+                    type="button"
+                    onClick={() => setGt(v)}
+                    className="flex-1 py-1.5 rounded-lg text-[10px] tracking-widest uppercase transition-all"
+                    style={{
+                      border: `1px solid ${gt === v ? "rgba(234,97,137,0.5)" : "rgba(234,97,137,0.12)"}`,
+                      backgroundColor: gt === v ? "rgba(234,97,137,0.1)" : "transparent",
+                      color: gt === v ? "#EA6189" : "var(--text-muted)",
+                    }}
+                  >
+                    {v ? "Price >" : "Price ≤"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Threshold */}
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] tracking-[0.15em] uppercase" style={{ color: "var(--text-muted)" }}>Threshold</span>
+                  <span className="text-sm tabular-nums text-[var(--text)]">{threshold}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={1} max={99} value={threshold}
+                  onChange={(e) => setThreshold(Number(e.target.value))}
+                  className="w-full accent-[#EA6189]"
+                />
+                {selected.lastTradePrice != null && (
+                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
+                    Current price: <span style={{ color: "#EA6189" }}>{(selected.lastTradePrice * 100).toFixed(1)}%</span>
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <button type="button" onClick={reset} className="text-[10px] tracking-widest uppercase text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
+              Cancel
+            </button>
+            {selected && (
+              <button
+                type="button"
+                onClick={confirm}
+                className="px-3 py-1.5 rounded-lg text-[10px] tracking-widest uppercase text-white transition-all"
+                style={{ backgroundColor: "#EA6189" }}
+              >
+                Add Trigger
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAdding(true)}
+          className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] tracking-widest uppercase transition-all w-full"
+          style={{ border: "1px dashed rgba(234,97,137,0.25)", color: "var(--text-muted)" }}
+        >
+          <Plus size={11} />
+          Add Polymarket Trigger
+        </button>
+      )}
     </Field>
   );
 }

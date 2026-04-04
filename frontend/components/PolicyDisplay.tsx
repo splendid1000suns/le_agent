@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { fetchTokenMap, type TokenInfo } from "@/lib/tokenList";
-import type { Policy } from "@/lib/types";
+import type { Policy, PolymarketTrigger } from "@/lib/types";
 
 function useTokenMap() {
   return useQuery({
@@ -82,6 +82,43 @@ function ContractChip({ address }: { address: string }) {
   );
 }
 
+function TriggerRow({ trigger }: { trigger: PolymarketTrigger }) {
+  const { data } = useQuery({
+    queryKey: ["polymarket-market", trigger.token_id],
+    queryFn: async () => {
+      const res = await fetch(`/api/polymarket-market?token_id=${encodeURIComponent(trigger.token_id)}`);
+      if (!res.ok) return null;
+      return res.json() as Promise<{ question: string; image: string | null; lastTradePrice: number | null } | null>;
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  return (
+    <div
+      className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[11px]"
+      style={{ backgroundColor: "rgba(234,97,137,0.04)", border: "1px solid rgba(234,97,137,0.1)" }}
+    >
+      {data?.image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={data.image}
+          alt=""
+          width={20}
+          height={20}
+          className="rounded shrink-0 object-cover"
+          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+        />
+      )}
+      <span className="flex-1 truncate" style={{ color: "var(--text)" }}>
+        {data?.question ?? <span className="font-mono text-[10px]">{trigger.token_id.slice(0, 16)}…</span>}
+      </span>
+      <span className="shrink-0 tabular-nums" style={{ color: "#EA6189" }}>
+        {trigger.gt ? ">" : "≤"} {(trigger.threshold * 100).toFixed(0)}%
+      </span>
+    </div>
+  );
+}
+
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
@@ -138,17 +175,7 @@ export function PolicyDisplay({ policy }: { policy: Policy }) {
         <Row label="Polymarket Triggers">
           <div className="flex flex-col gap-1.5">
             {policy.triggers.map((t, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 text-[11px] tabular-nums"
-                style={{ color: "var(--text-muted)" }}
-              >
-                <span className="font-mono">#{t.token_id}</span>
-                <span style={{ color: "#EA6189" }}>{t.gt ? ">" : "≤"}</span>
-                <span style={{ color: "var(--text)" }}>
-                  {t.threshold}
-                </span>
-              </div>
+              <TriggerRow key={i} trigger={t} />
             ))}
           </div>
         </Row>
