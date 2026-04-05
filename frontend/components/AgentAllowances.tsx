@@ -35,7 +35,7 @@ function useTokenMap() {
 }
 
 function formatAllowance(raw: bigint, decimals: number): string {
-  if (raw >= maxUint256 / 2n) return "Unlimited";
+  if (raw >= maxUint256 / BigInt(2)) return "∞";
   const n = parseFloat(formatUnits(raw, decimals));
   if (n === 0) return "0";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
@@ -49,7 +49,11 @@ interface Props {
   onSetAllowance: () => void;
 }
 
-export function AgentAllowances({ contractAddress, tokens, onSetAllowance }: Props) {
+export function AgentAllowances({
+  contractAddress,
+  tokens,
+  onSetAllowance,
+}: Props) {
   const { address: walletAddress } = useAccount();
   const { data: tokenMap } = useTokenMap();
 
@@ -82,10 +86,18 @@ export function AgentAllowances({ contractAddress, tokens, onSetAllowance }: Pro
   }
 
   return (
-    <div className="rounded-xl border overflow-hidden" style={{ borderColor: "rgba(234,97,137,0.12)" }}>
+    <div
+      className="rounded-xl border overflow-hidden"
+      style={{ borderColor: "rgba(234,97,137,0.12)" }}
+    >
       <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
         <thead>
-          <tr style={{ borderBottom: "1px solid rgba(234,97,137,0.1)", background: "rgba(234,97,137,0.04)" }}>
+          <tr
+            style={{
+              borderBottom: "1px solid rgba(234,97,137,0.1)",
+              background: "rgba(234,97,137,0.04)",
+            }}
+          >
             {["Token", "Your Allowance", ""].map((h) => (
               <th
                 key={h}
@@ -99,40 +111,65 @@ export function AgentAllowances({ contractAddress, tokens, onSetAllowance }: Pro
         </thead>
         <tbody>
           {tokens.map((addr, i) => {
-            const info: TokenInfo | undefined = tokenMap?.get(addr.toLowerCase());
+            const info: TokenInfo | undefined = tokenMap?.get(
+              addr.toLowerCase(),
+            );
             const allowanceResult = results?.[i * 2];
             const decimalsResult = results?.[i * 2 + 1];
-            const allowance = allowanceResult?.status === "success"
-              ? (allowanceResult.result as bigint)
-              : null;
-            const decimals = decimalsResult?.status === "success"
-              ? (decimalsResult.result as number)
-              : (info?.decimals ?? 18);
+            const allowance =
+              allowanceResult?.status === "success"
+                ? (allowanceResult.result as bigint)
+                : null;
+            const decimals =
+              decimalsResult?.status === "success"
+                ? (decimalsResult.result as number)
+                : (info?.decimals ?? 18);
 
-            const isUnlimited = allowance !== null && allowance >= maxUint256 / 2n;
+            const isUnlimited =
+              allowance !== null && allowance >= maxUint256 / BigInt(2);
 
             return (
               <tr
                 key={addr}
                 style={{
-                  borderBottom: i < tokens.length - 1 ? "1px solid rgba(107,114,128,0.1)" : "none",
-                  background: i % 2 === 0 ? "transparent" : "rgba(107,114,128,0.02)",
+                  borderBottom:
+                    i < tokens.length - 1
+                      ? "1px solid rgba(107,114,128,0.1)"
+                      : "none",
+                  background:
+                    i % 2 === 0 ? "transparent" : "rgba(107,114,128,0.02)",
                 }}
               >
                 <td className="px-3 py-2.5">
-                  <span className="inline-flex items-center gap-1.5" style={{ color: "var(--text)" }}>
+                  <span
+                    className="inline-flex items-center gap-1.5"
+                    style={{ color: "var(--text)" }}
+                  >
                     {info?.logoURI && (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
                         src={info.logoURI}
                         alt={info.symbol}
                         className="w-4 h-4 rounded-full shrink-0"
-                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+                        onError={(e) => {
+                          (e.currentTarget as HTMLImageElement).style.display =
+                            "none";
+                        }}
                       />
                     )}
-                    <span>{info ? info.symbol : <span className="font-mono">{addr.slice(0, 6)}…{addr.slice(-4)}</span>}</span>
+                    <span>
+                      {info ? (
+                        info.symbol
+                      ) : (
+                        <span className="font-mono">
+                          {addr.slice(0, 6)}…{addr.slice(-4)}
+                        </span>
+                      )}
+                    </span>
                     {info && (
-                      <span style={{ color: "var(--text-muted)" }}>{info.name}</span>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        {info.name}
+                      </span>
                     )}
                   </span>
                 </td>
@@ -142,10 +179,23 @@ export function AgentAllowances({ contractAddress, tokens, onSetAllowance }: Pro
                   ) : allowance === null ? (
                     <span style={{ color: "var(--text-muted)" }}>—</span>
                   ) : (
-                    <span style={{ color: isUnlimited ? "#4ade80" : allowance === 0n ? "#f87171" : "var(--text)" }}>
+                    <span
+                      style={{
+                        color: isUnlimited
+                          ? "#4ade80"
+                          : allowance === BigInt(0)
+                            ? "#f87171"
+                            : "var(--text)",
+                      }}
+                    >
                       {formatAllowance(allowance, decimals)}
-                      {info && !isUnlimited && allowance > 0n && (
-                        <span className="ml-1" style={{ color: "var(--text-muted)" }}>{info.symbol}</span>
+                      {info && !isUnlimited && allowance > BigInt(0) && (
+                        <span
+                          className="ml-1"
+                          style={{ color: "var(--text-muted)" }}
+                        >
+                          {info.symbol}
+                        </span>
                       )}
                     </span>
                   )}
@@ -154,7 +204,10 @@ export function AgentAllowances({ contractAddress, tokens, onSetAllowance }: Pro
                   <button
                     onClick={onSetAllowance}
                     className="text-[10px] tracking-widest uppercase transition-colors px-2 py-1 rounded"
-                    style={{ color: "#EA6189", border: "1px solid rgba(234,97,137,0.25)" }}
+                    style={{
+                      color: "#EA6189",
+                      border: "1px solid rgba(234,97,137,0.25)",
+                    }}
                   >
                     Set
                   </button>
