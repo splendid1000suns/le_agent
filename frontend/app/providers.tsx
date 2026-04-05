@@ -17,10 +17,16 @@ const ThemeContext = createContext<{ theme: Theme; toggleTheme: () => void }>({
 export function useTheme() { return useContext(ThemeContext); }
 
 function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("theme") as Theme) ?? "light";
+    }
+    return "light";
+  });
   useEffect(() => {
     document.documentElement.classList.remove("dark", "light");
     document.documentElement.classList.add(theme);
+    localStorage.setItem("theme", theme);
   }, [theme]);
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme: () => setTheme(t => t === "dark" ? "light" : "dark") }}>

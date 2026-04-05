@@ -33,7 +33,17 @@ function ConnectGate() {
         <p className="text-sm tracking-widest uppercase text-[var(--text)]" style={{ opacity: 0.8 }}>
           Connect your wallet to continue
         </p>
-        <ConnectButton />
+        <ConnectButton.Custom>
+          {({ openConnectModal }) => (
+            <button
+              onClick={openConnectModal}
+              className="px-6 py-2.5 rounded-full text-sm tracking-widest uppercase text-white transition-opacity hover:opacity-80 cursor-pointer"
+              style={{ backgroundColor: "#EA6189" }}
+            >
+              Connect Wallet
+            </button>
+          )}
+        </ConnectButton.Custom>
       </div>
     </div>
   );
