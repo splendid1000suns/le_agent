@@ -69,6 +69,13 @@ export async function getAgents(token: string): Promise<Agent[]> {
   return req<Agent[]>("/agents", { headers: bearer(token) });
 }
 
+export async function getAgentWallet(
+  token: string,
+  name: string,
+): Promise<{ ens_name: string; wallet: string }> {
+  return req(`/agents/wallet?name=${encodeURIComponent(name)}`, { headers: bearer(token) });
+}
+
 export async function getAgentByName(token: string, name: string): Promise<Agent> {
   return req<Agent>(`/agents/${encodeURIComponent(name)}`, { headers: bearer(token) });
 }

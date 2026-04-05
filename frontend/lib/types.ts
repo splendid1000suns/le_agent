@@ -17,6 +17,7 @@ export type Agent = {
   ens_name: string
   owner: string
   wallet: string
+  contract_address: string | null
   description: string | null
   image_uri: string | null
   strategy: string
@@ -28,6 +29,7 @@ export type AgentCreate = {
   name: string
   strategy: string
   policy: Policy
+  contract_address: string
   record_sig: string
   description?: string | null
   image_uri?: string | null

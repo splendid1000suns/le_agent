@@ -3,17 +3,28 @@
 import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSignMessage } from "wagmi";
+import {
+  useSignMessage,
+  useDeployContract,
+  useConfig,
+  useAccount,
+} from "wagmi";
+import { getTransactionCount } from "@wagmi/core";
+import { getContractAddress } from "viem";
 import { X, Plus, Search, ChevronDown, ChevronUp } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { createAgent, updateAgent, ApiError } from "@/lib/api";
+import { createAgent, updateAgent, getAgentWallet, ApiError } from "@/lib/api";
 import { fetchTokenMap, type TokenInfo } from "@/lib/tokenList";
+import { EXECUTOR_ABI, EXECUTOR_BYTECODE } from "@/lib/contracts";
 import type {
   AgentCreate,
   AgentUpdate,
   Policy,
   PolymarketTrigger,
 } from "@/lib/types";
+
+const CRE_ADDRESS = (process.env.NEXT_PUBLIC_CRE_ADDRESS ??
+  "") as `0x${string}`;
 
 /* ── Uniswap routers on Ethereum mainnet ──────────────────────── */
 
@@ -36,7 +47,9 @@ function sortKeys(val: unknown): unknown {
   if (Array.isArray(val)) return val.map(sortKeys);
   if (val !== null && typeof val === "object") {
     return Object.fromEntries(
-      Object.keys(val as object).sort().map((k) => [k, sortKeys((val as Record<string, unknown>)[k])]),
+      Object.keys(val as object)
+        .sort()
+        .map((k) => [k, sortKeys((val as Record<string, unknown>)[k])]),
     );
   }
   return val;
@@ -49,7 +62,9 @@ export function buildRecordPayload(
   description: string | null,
   image_uri: string | null,
 ): string {
-  return JSON.stringify(sortKeys({ name, strategy, policy, description, image_uri }));
+  return JSON.stringify(
+    sortKeys({ name, strategy, policy, description, image_uri }),
+  );
 }
 
 export const EMPTY_POLICY: Policy = {
@@ -96,10 +111,15 @@ export function CreateAgentModal({
   const { token } = useAuth();
   const queryClient = useQueryClient();
   const { signMessageAsync } = useSignMessage();
+  const { deployContractAsync } = useDeployContract();
+  const config = useConfig();
+  const { address: walletAddress } = useAccount();
   const isEdit = agentName !== undefined;
 
   const [form, setForm] = useState<FormState>({ ...EMPTY, ...initialValues });
   const [mounted, setMounted] = useState(false);
+  const [deployStep, setDeployStep] = useState<string | null>(null);
+  const [deployError, setDeployError] = useState<string | null>(null);
 
   useEffect(() => setMounted(true), []);
 
@@ -122,6 +142,12 @@ export function CreateAgentModal({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
       onClose();
+    },
+    onError: (err) => {
+      setDeployError(
+        err instanceof Error ? err.message : "Agent creation failed",
+      );
+      setDeployStep(null);
     },
   });
 
@@ -148,12 +174,78 @@ export function CreateAgentModal({
     const description = form.description.trim() || null;
     const image_uri = form.image_uri.trim() || null;
 
-    const sigPayload = buildRecordPayload(name, strategy, policy, description, image_uri);
+    const sigPayload = buildRecordPayload(
+      name,
+      strategy,
+      policy,
+      description,
+      image_uri,
+    );
 
-    signMessageAsync({ message: sigPayload }).then((record_sig) => {
-      if (isEdit) editMutation.mutate({ name, strategy, policy, description, image_uri, record_sig });
-      else createMutation.mutate({ name, strategy, policy, description, image_uri, record_sig });
-    });
+    setDeployError(null);
+    setDeployStep("signing");
+
+    signMessageAsync({ message: sigPayload })
+      .then(async (record_sig) => {
+        if (isEdit) {
+          setDeployStep(null);
+          editMutation.mutate({
+            name,
+            strategy,
+            policy,
+            description,
+            image_uri,
+            record_sig,
+          });
+          return;
+        }
+
+        try {
+          setDeployStep("deploying");
+          if (!CRE_ADDRESS || CRE_ADDRESS === "0x") {
+            throw new Error(
+              "CRE contract address is not configured (NEXT_PUBLIC_CRE_ADDRESS)",
+            );
+          }
+          const { wallet: agentWallet } = await getAgentWallet(token!, name);
+          if (!agentWallet) {
+            throw new Error(
+              "Agent wallet address was not returned by the server",
+            );
+          }
+          const nonce = await getTransactionCount(config, {
+            address: walletAddress!,
+          });
+          const contract_address = getContractAddress({
+            from: walletAddress!,
+            nonce,
+          });
+          await deployContractAsync({
+            abi: EXECUTOR_ABI,
+            bytecode: EXECUTOR_BYTECODE,
+            args: [agentWallet as `0x${string}`, CRE_ADDRESS],
+          });
+
+          setDeployStep("creating");
+          createMutation.mutate({
+            name,
+            strategy,
+            policy,
+            description,
+            image_uri,
+            record_sig,
+            contract_address,
+          });
+        } catch (err) {
+          setDeployError(
+            err instanceof Error ? err.message : "Contract deployment failed",
+          );
+          setDeployStep(null);
+        }
+      })
+      .catch(() => {
+        setDeployStep(null);
+      });
   }
 
   if (!mounted || !open) return null;
@@ -262,8 +354,10 @@ export function CreateAgentModal({
               onChange={(p) => set("policy", p)}
             />
 
-            {apiError && (
-              <p className="text-xs text-red-400 -mt-2">{apiError}</p>
+            {(apiError || deployError) && (
+              <p className="text-xs text-red-400 -mt-2">
+                {apiError ?? deployError}
+              </p>
             )}
 
             <div className="flex items-center justify-end gap-3 pt-1">
@@ -276,22 +370,31 @@ export function CreateAgentModal({
               </button>
               <button
                 type="submit"
-                disabled={mutation.isPending || form.policy.tokens.length === 0}
+                disabled={
+                  mutation.isPending ||
+                  deployStep !== null ||
+                  form.policy.tokens.length === 0
+                }
                 className="px-6 py-2.5 rounded-xl text-xs tracking-widest uppercase text-white transition-all disabled:opacity-50"
                 style={{
                   backgroundColor: "#EA6189",
-                  boxShadow: mutation.isPending
-                    ? "none"
-                    : "0 0 20px rgba(234,97,137,0.3)",
+                  boxShadow:
+                    mutation.isPending || deployStep !== null
+                      ? "none"
+                      : "0 0 20px rgba(234,97,137,0.3)",
                 }}
               >
-                {mutation.isPending
-                  ? isEdit
-                    ? "Saving…"
-                    : "Creating…"
-                  : isEdit
-                    ? "Save Changes"
-                    : "Create Agent"}
+                {deployStep === "signing"
+                  ? "Signing…"
+                  : deployStep === "deploying"
+                    ? "Deploying contract…"
+                    : deployStep === "creating" || mutation.isPending
+                      ? isEdit
+                        ? "Saving…"
+                        : "Creating…"
+                      : isEdit
+                        ? "Save Changes"
+                        : "Create Agent"}
               </button>
             </div>
           </form>
@@ -325,7 +428,13 @@ async function pinFileToIPFS(file: File): Promise<string> {
   return `ipfs://${IpfsHash}`;
 }
 
-function ImageUpload({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function ImageUpload({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -353,31 +462,58 @@ function ImageUpload({ value, onChange }: { value: string; onChange: (v: string)
       <label
         className="relative flex items-center justify-center rounded-xl cursor-pointer transition-colors shrink-0 overflow-hidden"
         style={{
-          width: 64, height: 64,
+          width: 64,
+          height: 64,
           border: "1px dashed rgba(234,97,137,0.3)",
           backgroundColor: "var(--bg)",
         }}
       >
         {preview ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={preview} alt="preview" className="w-full h-full object-cover" />
+          <img
+            src={preview}
+            alt="preview"
+            className="w-full h-full object-cover"
+          />
         ) : (
-          <span className="text-2xl" style={{ color: "rgba(234,97,137,0.4)" }}>+</span>
+          <span className="text-2xl" style={{ color: "rgba(234,97,137,0.4)" }}>
+            +
+          </span>
         )}
-        <input type="file" accept="image/*" className="sr-only" onChange={handleFile} disabled={uploading} />
+        <input
+          type="file"
+          accept="image/*"
+          className="sr-only"
+          onChange={handleFile}
+          disabled={uploading}
+        />
       </label>
       <div className="flex flex-col gap-1 min-w-0">
         {uploading ? (
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>Uploading to IPFS…</span>
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Uploading to IPFS…
+          </span>
         ) : value ? (
           <>
-            <span className="text-[10px] font-mono truncate" style={{ color: "var(--text-muted)" }}>{value}</span>
-            <button type="button" onClick={() => onChange("")} className="text-[10px] tracking-widest uppercase text-left transition-colors" style={{ color: "#EA6189" }}>
+            <span
+              className="text-[10px] font-mono truncate"
+              style={{ color: "var(--text-muted)" }}
+            >
+              {value}
+            </span>
+            <button
+              type="button"
+              onClick={() => onChange("")}
+              className="text-[10px] tracking-widest uppercase text-left transition-colors"
+              style={{ color: "#EA6189" }}
+            >
               Remove
             </button>
           </>
         ) : (
-          <span className="text-xs" style={{ color: "var(--text-muted)" }}>Click to upload an image</span>
+          <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+            Click to upload an image
+          </span>
         )}
         {error && <span className="text-[10px] text-red-400">{error}</span>}
       </div>
@@ -778,11 +914,17 @@ function TriggersEditor({
   const [gt, setGt] = useState(true);
 
   useEffect(() => {
-    if (search.length < 3) { setResults([]); return; }
+    if (search.length < 3) {
+      setResults([]);
+      return;
+    }
     const t = setTimeout(async () => {
       setSearching(true);
-      try { setResults(await searchPolymarkets(search)); }
-      finally { setSearching(false); }
+      try {
+        setResults(await searchPolymarkets(search));
+      } finally {
+        setSearching(false);
+      }
     }, 400);
     return () => clearTimeout(t);
   }, [search]);
@@ -817,11 +959,29 @@ function TriggersEditor({
       {triggers.length > 0 && (
         <div className="flex flex-col gap-1.5">
           {triggers.map((t, i) => (
-            <div key={i} className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]" style={{ backgroundColor: "var(--bg)", border: "1px solid rgba(234,97,137,0.12)" }}>
-              <span className="font-mono text-[10px] truncate text-[var(--text-muted)]" style={{ maxWidth: 120 }}>{t.token_id}</span>
+            <div
+              key={i}
+              className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px]"
+              style={{
+                backgroundColor: "var(--bg)",
+                border: "1px solid rgba(234,97,137,0.12)",
+              }}
+            >
+              <span
+                className="font-mono text-[10px] truncate text-[var(--text-muted)]"
+                style={{ maxWidth: 120 }}
+              >
+                {t.token_id}
+              </span>
               <span style={{ color: "#EA6189" }}>{t.gt ? ">" : "≤"}</span>
-              <span className="text-[var(--text)]">{(t.threshold * 100).toFixed(0)}%</span>
-              <button type="button" onClick={() => remove(i)} className="ml-auto text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
+              <span className="text-[var(--text)]">
+                {(t.threshold * 100).toFixed(0)}%
+              </span>
+              <button
+                type="button"
+                onClick={() => remove(i)}
+                className="ml-auto text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+              >
                 <X size={11} />
               </button>
             </div>
@@ -831,12 +991,27 @@ function TriggersEditor({
 
       {/* Add trigger form */}
       {adding ? (
-        <div className="flex flex-col gap-3 p-3 rounded-xl" style={{ border: "1px solid rgba(234,97,137,0.2)", backgroundColor: "var(--bg)" }}>
+        <div
+          className="flex flex-col gap-3 p-3 rounded-xl"
+          style={{
+            border: "1px solid rgba(234,97,137,0.2)",
+            backgroundColor: "var(--bg)",
+          }}
+        >
           {!selected ? (
             /* Step 1: search */
             <div className="relative">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-xl" style={{ backgroundColor: "var(--surface)", border: "1px solid rgba(234,97,137,0.15)" }}>
-                <Search size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-xl"
+                style={{
+                  backgroundColor: "var(--surface)",
+                  border: "1px solid rgba(234,97,137,0.15)",
+                }}
+              >
+                <Search
+                  size={12}
+                  style={{ color: "var(--text-muted)", flexShrink: 0 }}
+                />
                 <input
                   autoFocus
                   value={search}
@@ -844,28 +1019,64 @@ function TriggersEditor({
                   placeholder="Search Polymarket markets…"
                   className="flex-1 bg-transparent outline-none text-sm text-[var(--text)] placeholder:text-[var(--text-muted)]"
                 />
-                {searching && <span className="text-[10px] text-[var(--text-muted)]">…</span>}
+                {searching && (
+                  <span className="text-[10px] text-[var(--text-muted)]">
+                    …
+                  </span>
+                )}
               </div>
               {search.length < 3 && (
-                <p className="text-[10px] mt-1.5" style={{ color: "var(--text-muted)" }}>Type at least 3 characters to search</p>
+                <p
+                  className="text-[10px] mt-1.5"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  Type at least 3 characters to search
+                </p>
               )}
               {results.length > 0 && (
-                <div className="absolute z-10 left-0 right-0 mt-1 rounded-xl overflow-hidden overflow-y-auto" style={{ maxHeight: 240, backgroundColor: "var(--surface)", border: "1px solid rgba(234,97,137,0.15)", boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+                <div
+                  className="absolute z-10 left-0 right-0 mt-1 rounded-xl overflow-hidden overflow-y-auto"
+                  style={{
+                    maxHeight: 240,
+                    backgroundColor: "var(--surface)",
+                    border: "1px solid rgba(234,97,137,0.15)",
+                    boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+                  }}
+                >
                   {results.map((m, i) => (
                     <button
                       key={i}
                       type="button"
-                      onClick={() => { setSelected(m); setResults([]); }}
+                      onClick={() => {
+                        setSelected(m);
+                        setResults([]);
+                      }}
                       className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-[var(--bg)]"
                     >
                       {m.image && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={m.image} alt="" width={24} height={24} className="rounded shrink-0 mt-0.5 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                        <img
+                          src={m.image}
+                          alt=""
+                          width={24}
+                          height={24}
+                          className="rounded shrink-0 mt-0.5 object-cover"
+                          onError={(e) => {
+                            (
+                              e.currentTarget as HTMLImageElement
+                            ).style.display = "none";
+                          }}
+                        />
                       )}
                       <div className="flex flex-col gap-0.5 min-w-0">
-                        <span className="text-xs text-[var(--text)] leading-snug line-clamp-2">{m.question}</span>
+                        <span className="text-xs text-[var(--text)] leading-snug line-clamp-2">
+                          {m.question}
+                        </span>
                         {m.lastTradePrice != null && (
-                          <span className="text-[10px]" style={{ color: "#EA6189" }}>
+                          <span
+                            className="text-[10px]"
+                            style={{ color: "#EA6189" }}
+                          >
                             {(m.lastTradePrice * 100).toFixed(1)}% YES
                           </span>
                         )}
@@ -875,7 +1086,12 @@ function TriggersEditor({
                 </div>
               )}
               {!searching && search.length >= 3 && results.length === 0 && (
-                <p className="text-[10px] mt-1.5" style={{ color: "var(--text-muted)" }}>No markets found</p>
+                <p
+                  className="text-[10px] mt-1.5"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  No markets found
+                </p>
               )}
             </div>
           ) : (
@@ -884,10 +1100,26 @@ function TriggersEditor({
               <div className="flex items-start gap-2">
                 {selected.image && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={selected.image} alt="" width={28} height={28} className="rounded shrink-0 mt-0.5 object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                  <img
+                    src={selected.image}
+                    alt=""
+                    width={28}
+                    height={28}
+                    className="rounded shrink-0 mt-0.5 object-cover"
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display =
+                        "none";
+                    }}
+                  />
                 )}
-                <p className="text-xs text-[var(--text)] leading-snug">{selected.question}</p>
-                <button type="button" onClick={() => setSelected(null)} className="ml-auto text-[var(--text-muted)] hover:text-[var(--text)] transition-colors shrink-0">
+                <p className="text-xs text-[var(--text)] leading-snug">
+                  {selected.question}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelected(null)}
+                  className="ml-auto text-[var(--text-muted)] hover:text-[var(--text)] transition-colors shrink-0"
+                >
                   <X size={11} />
                 </button>
               </div>
@@ -902,7 +1134,8 @@ function TriggersEditor({
                     className="flex-1 py-1.5 rounded-lg text-[10px] tracking-widest uppercase transition-all"
                     style={{
                       border: `1px solid ${gt === v ? "rgba(234,97,137,0.5)" : "rgba(234,97,137,0.12)"}`,
-                      backgroundColor: gt === v ? "rgba(234,97,137,0.1)" : "transparent",
+                      backgroundColor:
+                        gt === v ? "rgba(234,97,137,0.1)" : "transparent",
                       color: gt === v ? "#EA6189" : "var(--text-muted)",
                     }}
                   >
@@ -914,18 +1147,33 @@ function TriggersEditor({
               {/* Threshold */}
               <div className="flex flex-col gap-1.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] tracking-[0.15em] uppercase" style={{ color: "var(--text-muted)" }}>Threshold</span>
-                  <span className="text-sm tabular-nums text-[var(--text)]">{threshold}%</span>
+                  <span
+                    className="text-[10px] tracking-[0.15em] uppercase"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    Threshold
+                  </span>
+                  <span className="text-sm tabular-nums text-[var(--text)]">
+                    {threshold}%
+                  </span>
                 </div>
                 <input
                   type="range"
-                  min={1} max={99} value={threshold}
+                  min={1}
+                  max={99}
+                  value={threshold}
                   onChange={(e) => setThreshold(Number(e.target.value))}
                   className="w-full accent-[#EA6189]"
                 />
                 {selected.lastTradePrice != null && (
-                  <p className="text-[10px]" style={{ color: "var(--text-muted)" }}>
-                    Current price: <span style={{ color: "#EA6189" }}>{(selected.lastTradePrice * 100).toFixed(1)}%</span>
+                  <p
+                    className="text-[10px]"
+                    style={{ color: "var(--text-muted)" }}
+                  >
+                    Current price:{" "}
+                    <span style={{ color: "#EA6189" }}>
+                      {(selected.lastTradePrice * 100).toFixed(1)}%
+                    </span>
                   </p>
                 )}
               </div>
@@ -934,7 +1182,11 @@ function TriggersEditor({
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-2 pt-1">
-            <button type="button" onClick={reset} className="text-[10px] tracking-widest uppercase text-[var(--text-muted)] hover:text-[var(--text)] transition-colors">
+            <button
+              type="button"
+              onClick={reset}
+              className="text-[10px] tracking-widest uppercase text-[var(--text-muted)] hover:text-[var(--text)] transition-colors"
+            >
               Cancel
             </button>
             {selected && (
@@ -954,7 +1206,10 @@ function TriggersEditor({
           type="button"
           onClick={() => setAdding(true)}
           className="flex items-center gap-2 px-3 py-2 rounded-xl text-[11px] tracking-widest uppercase transition-all w-full"
-          style={{ border: "1px dashed rgba(234,97,137,0.25)", color: "var(--text-muted)" }}
+          style={{
+            border: "1px dashed rgba(234,97,137,0.25)",
+            color: "var(--text-muted)",
+          }}
         >
           <Plus size={11} />
           Add Polymarket Trigger

@@ -3,20 +3,22 @@
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import {
   getAgentByName,
-  getAgentTrades,
   updateAgent,
   deleteAgent,
   startAgent,
   stopAgent,
   ApiError,
 } from "@/lib/api";
-import type { Agent, Trade, Policy } from "@/lib/types";
+import type { Agent, Policy } from "@/lib/types";
 import { CreateAgentModal, EMPTY_POLICY } from "@/components/CreateAgentModal";
 import { PolicyDisplay } from "@/components/PolicyDisplay";
+import { AllowanceModal } from "@/components/AllowanceModal";
+import { AgentTrades } from "@/components/AgentTrades";
+import { AgentAllowances } from "@/components/AgentAllowances";
 
 /* ── Active toggle ────────────────────────────────────────────── */
 
@@ -54,147 +56,6 @@ function ActiveToggle({
   );
 }
 
-/* ── Trades table ─────────────────────────────────────────────── */
-
-function fmt(date: string) {
-  return new Date(date).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function truncHash(hash: string) {
-  return `${hash.slice(0, 8)}…${hash.slice(-6)}`;
-}
-
-function TradesTable({ trades, loading }: { trades: Trade[]; loading: boolean }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <p
-          className="text-[10px] tracking-[0.2em] uppercase shrink-0"
-          style={{ color: "#EA6189" }}
-        >
-          Trades
-        </p>
-        <div
-          className="flex-1 h-px"
-          style={{ backgroundColor: "rgba(234,97,137,0.12)" }}
-        />
-      </div>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-10">
-          <p className="text-xs tracking-widest uppercase text-[var(--text-muted)]">
-            Loading…
-          </p>
-        </div>
-      ) : trades.length === 0 ? (
-        <div className="flex items-center justify-center py-10">
-          <p className="text-xs tracking-widest uppercase text-[var(--text-muted)]">
-            No trades yet
-          </p>
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-xl" style={{ border: "1px solid rgba(234,97,137,0.1)" }}>
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr style={{ borderBottom: "1px solid rgba(234,97,137,0.1)" }}>
-                {["Date", "Swap", "Value", "Status", "Tx"].map((h) => (
-                  <th
-                    key={h}
-                    className="px-4 py-3 text-left text-[10px] tracking-[0.15em] uppercase font-normal"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {trades.map((trade, i) => (
-                <tr
-                  key={trade.tx_hash}
-                  style={{
-                    borderBottom:
-                      i < trades.length - 1
-                        ? "1px solid rgba(234,97,137,0.06)"
-                        : "none",
-                  }}
-                >
-                  <td
-                    className="px-4 py-3 text-xs tabular-nums"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    {fmt(trade.timestamp)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="text-xs tracking-wider uppercase font-medium"
-                      style={{ color: "var(--text)" }}
-                    >
-                      {trade.token_in}
-                    </span>
-                    <span
-                      className="mx-1.5 text-xs"
-                      style={{ color: "#EA6189" }}
-                    >
-                      →
-                    </span>
-                    <span
-                      className="text-xs tracking-wider uppercase font-medium"
-                      style={{ color: "var(--text)" }}
-                    >
-                      {trade.token_out}
-                    </span>
-                  </td>
-                  <td
-                    className="px-4 py-3 text-xs tabular-nums"
-                    style={{ color: "var(--text)" }}
-                  >
-                    ${Number(trade.value_usd).toFixed(2)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="inline-flex items-center gap-1 text-[10px] tracking-[0.15em] uppercase px-2 py-0.5 rounded-full"
-                      style={{
-                        color: trade.success ? "#4ade80" : "#f87171",
-                        backgroundColor: trade.success
-                          ? "rgba(74,222,128,0.08)"
-                          : "rgba(248,113,113,0.08)",
-                        border: `1px solid ${trade.success ? "rgba(74,222,128,0.25)" : "rgba(248,113,113,0.25)"}`,
-                      }}
-                    >
-                      <span
-                        className="w-1 h-1 rounded-full"
-                        style={{
-                          backgroundColor: trade.success ? "#4ade80" : "#f87171",
-                        }}
-                      />
-                      {trade.success ? "Success" : "Failed"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className="text-[11px] font-mono"
-                      style={{ color: "var(--text-muted)" }}
-                      title={trade.tx_hash}
-                    >
-                      {truncHash(trade.tx_hash)}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
 /* ── Section helper ───────────────────────────────────────────── */
 
 function Section({
@@ -229,6 +90,7 @@ export default function AgentDetailPage() {
 
   const [editing, setEditing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [allowanceOpen, setAllowanceOpen] = useState(false);
 
   const name = decodeURIComponent(id);
 
@@ -246,16 +108,6 @@ export default function AgentDetailPage() {
         [401, 403, 404].includes(err.status)
       )
         return false;
-      return failureCount < 2;
-    },
-  });
-
-  const { data: trades = [], isLoading: tradesLoading } = useQuery({
-    queryKey: ["trades", name, token],
-    queryFn: () => getAgentTrades(token!, name),
-    enabled: !!token && !!name && !!agent,
-    retry: (failureCount, err) => {
-      if (err instanceof ApiError && err.status === 401) return false;
       return failureCount < 2;
     },
   });
@@ -419,6 +271,17 @@ export default function AgentDetailPage() {
                 disabled={toggleMutation.isPending}
               />
 
+              {agent.contract_address && agent.policy?.tokens?.length ? (
+                <button
+                  onClick={() => setAllowanceOpen(true)}
+                  className="p-2 rounded-lg transition-colors text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface)]"
+                  aria-label="Set allowance"
+                  title="Set token allowance"
+                >
+                  <ShieldCheck size={14} />
+                </button>
+              ) : null}
+
               <button
                 onClick={() => setEditing(true)}
                 className="p-2 rounded-lg transition-colors text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface)]"
@@ -489,10 +352,28 @@ export default function AgentDetailPage() {
 
           </div>
 
+          {/* Allowances */}
+          {agent.contract_address && agent.policy?.tokens?.length ? (
+            <div className="flex flex-col gap-3 max-w-4xl">
+              <p className="text-[10px] tracking-[0.2em] uppercase" style={{ color: "#EA6189" }}>
+                Contract Allowances
+              </p>
+              <AgentAllowances
+                contractAddress={agent.contract_address}
+                tokens={agent.policy.tokens}
+                onSetAllowance={() => setAllowanceOpen(true)}
+              />
+            </div>
+          ) : null}
+
           {/* Trades */}
-          <div className="max-w-4xl w-full">
-            <TradesTable trades={trades} loading={tradesLoading} />
+          <div className="flex flex-col gap-3">
+            <p className="text-[10px] tracking-[0.2em] uppercase" style={{ color: "#EA6189" }}>
+              Trade History
+            </p>
+            <AgentTrades agentName={agent.name} token={token!} />
           </div>
+
         </div>
       </div>
 
@@ -502,6 +383,15 @@ export default function AgentDetailPage() {
         agentName={agent.name}
         initialValues={editInitialValues}
       />
+
+      {agent.contract_address && agent.policy?.tokens?.length ? (
+        <AllowanceModal
+          open={allowanceOpen}
+          onClose={() => setAllowanceOpen(false)}
+          contractAddress={agent.contract_address}
+          tokens={agent.policy.tokens}
+        />
+      ) : null}
     </>
   );
 }

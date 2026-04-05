@@ -12,18 +12,25 @@ import { useEffect } from "react";
 function IPFSFixer() {
   useEffect(() => {
     function fix(el: Element) {
-      if (el instanceof HTMLImageElement && el.getAttribute("src")?.startsWith("ipfs://")) {
+      if (
+        el instanceof HTMLImageElement &&
+        el.getAttribute("src")?.startsWith("ipfs://")
+      ) {
         el.src = el.src.replace("ipfs://", "https://ipfs.io/ipfs/");
       }
       el.querySelectorAll?.('img[src^="ipfs://"]').forEach((img) => {
-        (img as HTMLImageElement).src = (img as HTMLImageElement).src.replace("ipfs://", "https://ipfs.io/ipfs/");
+        (img as HTMLImageElement).src = (img as HTMLImageElement).src.replace(
+          "ipfs://",
+          "https://ipfs.io/ipfs/",
+        );
       });
     }
 
     document.querySelectorAll('img[src^="ipfs://"]').forEach(fix);
 
     const observer = new MutationObserver((mutations) => {
-      for (const m of mutations) m.addedNodes.forEach((n) => n instanceof Element && fix(n));
+      for (const m of mutations)
+        m.addedNodes.forEach((n) => n instanceof Element && fix(n));
     });
     observer.observe(document.body, { childList: true, subtree: true });
     return () => observer.disconnect();
@@ -32,13 +39,14 @@ function IPFSFixer() {
 }
 
 const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID ?? "";
+const rpcProvider = process.env.NEXT_PUBLIC_RPC ?? "";
 
 const config = getDefaultConfig({
   appName: "le_agent",
   projectId,
   chains: [mainnet],
   transports: {
-    [mainnet.id]: http("https://cloudflare-eth.com"),
+    [mainnet.id]: http(rpcProvider),
   },
 });
 
