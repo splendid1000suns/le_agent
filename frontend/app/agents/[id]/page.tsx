@@ -409,6 +409,23 @@ export default function AgentDetailPage() {
                   {agent.running ? "Running" : "Stopped"}
                 </span>
               </div>
+              {agent.wallet && (
+                <a
+                  href={`https://etherscan.io/address/${agent.wallet}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 w-fit transition-opacity hover:opacity-70"
+                >
+                  <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                    {agent.wallet.slice(0, 6)}...{agent.wallet.slice(-4)}
+                  </span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#EA6189" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                    <polyline points="15 3 21 3 21 9" />
+                    <line x1="10" y1="14" x2="21" y2="3" />
+                  </svg>
+                </a>
+              )}
             </div>
 
             {/* Action controls */}

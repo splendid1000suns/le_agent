@@ -88,7 +88,8 @@ function SignInGate() {
       : "/main logo long black.svg";
 
   return (
-    <div className="flex h-full min-h-screen flex-col items-center justify-center gap-10 bg-[var(--bg)]">
+    <div className="relative flex h-full min-h-screen flex-col items-center justify-center gap-4 bg-[var(--bg)] overflow-hidden">
+      <GradientBlob />
       <button
         onClick={toggleTheme}
         className="absolute top-4 right-4 text-[var(--icon)] hover:text-[var(--text)] transition-colors cursor-pointer"
@@ -97,20 +98,25 @@ function SignInGate() {
         {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
       </button>
 
-      <Image src={logoSrc} alt="LeAgent" width={200} height={48} priority />
+      <div className="relative z-10 flex flex-col items-center gap-4">
+        <Image src={logoSrc} alt="LeAgent" width={200} height={48} priority />
 
-      <div className="flex flex-col items-center gap-3">
-        <button
-          onClick={signIn}
-          disabled={isAuthenticating}
-          className="px-6 py-2.5 rounded-full text-sm tracking-widest uppercase text-white transition-opacity disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
-          style={{ backgroundColor: "#EA6189" }}
-        >
-          {isAuthenticating ? "Waiting for signature…" : "Sign In"}
-        </button>
-        {error && (
-          <p className="text-xs text-red-400">{error}</p>
-        )}
+        <p className="text-2xl font-light tracking-wide text-[var(--text)]" style={{ opacity: 0.9 }}>
+          Cold storage. Hot trades.
+        </p>
+        <div className="mt-4 flex flex-col items-center gap-3">
+          <button
+            onClick={signIn}
+            disabled={isAuthenticating}
+            className="px-6 py-2.5 rounded-full text-sm tracking-widest uppercase text-white transition-opacity disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+            style={{ backgroundColor: "#EA6189" }}
+          >
+            {isAuthenticating ? "Waiting for signature…" : "Sign In"}
+          </button>
+          {error && (
+            <p className="text-xs text-red-400">{error}</p>
+          )}
+        </div>
       </div>
     </div>
   );
