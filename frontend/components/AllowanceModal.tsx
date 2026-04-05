@@ -43,7 +43,9 @@ export function AllowanceModal({
   useEffect(() => setMounted(true), []);
 
   useEffect(() => {
-    fetchTokenMap().then(setTokenMap).catch(() => {});
+    fetchTokenMap()
+      .then(setTokenMap)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -53,7 +55,13 @@ export function AllowanceModal({
   const tokenInfo = tokenMap.get(selectedToken.toLowerCase());
   const decimals = tokenInfo?.decimals ?? 18;
 
-  const { writeContract, data: txHash, isPending, reset, error: writeError } = useWriteContract();
+  const {
+    writeContract,
+    data: txHash,
+    isPending,
+    reset,
+    error: writeError,
+  } = useWriteContract();
 
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
@@ -62,9 +70,7 @@ export function AllowanceModal({
   function handleApprove() {
     if (!selectedToken || (!useMax && !amount)) return;
 
-    const parsedAmount = useMax
-      ? maxUint256
-      : parseUnits(amount, decimals);
+    const parsedAmount = useMax ? maxUint256 : parseUnits(amount, decimals);
 
     writeContract({
       address: selectedToken as `0x${string}`,
@@ -88,7 +94,10 @@ export function AllowanceModal({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
+      style={{
+        backgroundColor: "rgba(0,0,0,0.6)",
+        backdropFilter: "blur(4px)",
+      }}
       onClick={(e) => e.target === e.currentTarget && handleClose()}
     >
       <div
@@ -146,13 +155,22 @@ export function AllowanceModal({
               <span className="flex items-center gap-2 min-w-0">
                 {tokenInfo?.logoURI && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={tokenInfo.logoURI} alt="" className="w-5 h-5 rounded-full shrink-0" />
+                  <img
+                    src={tokenInfo.logoURI}
+                    alt=""
+                    className="w-5 h-5 rounded-full shrink-0"
+                  />
                 )}
                 <span className="truncate">
-                  {tokenInfo ? `${tokenInfo.symbol} — ${tokenInfo.name}` : selectedToken}
+                  {tokenInfo
+                    ? `${tokenInfo.symbol} — ${tokenInfo.name}`
+                    : selectedToken}
                 </span>
               </span>
-              <ChevronDown size={14} className="shrink-0 ml-2 text-[var(--text-muted)]" />
+              <ChevronDown
+                size={14}
+                className="shrink-0 ml-2 text-[var(--text-muted)]"
+              />
             </button>
 
             {tokenDropdownOpen && (
@@ -179,7 +197,11 @@ export function AllowanceModal({
                     >
                       {info?.logoURI && (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={info.logoURI} alt="" className="w-5 h-5 rounded-full shrink-0" />
+                        <img
+                          src={info.logoURI}
+                          alt=""
+                          className="w-5 h-5 rounded-full shrink-0"
+                        />
                       )}
                       <span className="truncate">
                         {info ? `${info.symbol} — ${info.name}` : addr}
@@ -235,9 +257,7 @@ export function AllowanceModal({
 
         {/* Error */}
         {writeError && (
-          <p className="text-xs text-red-400 break-all">
-            {writeError.shortMessage ?? writeError.message}
-          </p>
+          <p className="text-xs text-red-400 break-all">{writeError.message}</p>
         )}
 
         {/* Success */}
@@ -262,10 +282,10 @@ export function AllowanceModal({
           {isPending
             ? "Confirm in wallet…"
             : isConfirming
-            ? "Confirming…"
-            : isSuccess
-            ? "Done"
-            : "Approve"}
+              ? "Confirming…"
+              : isSuccess
+                ? "Done"
+                : "Approve"}
         </button>
       </div>
     </div>,

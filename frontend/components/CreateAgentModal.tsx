@@ -190,7 +190,6 @@ export function CreateAgentModal({
         if (isEdit) {
           setDeployStep(null);
           editMutation.mutate({
-            name,
             strategy,
             policy,
             description,
@@ -218,7 +217,7 @@ export function CreateAgentModal({
           });
           const contract_address = getContractAddress({
             from: walletAddress!,
-            nonce,
+            nonce: BigInt(nonce),
           });
           await deployContractAsync({
             abi: EXECUTOR_ABI,
