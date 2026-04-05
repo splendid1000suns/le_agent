@@ -18,7 +18,7 @@ function ConnectGate() {
       : "/main logo long black.svg";
 
   return (
-    <div className="flex h-full min-h-screen flex-col items-center justify-center gap-10 bg-[var(--bg)]">
+    <div className="flex h-full min-h-screen flex-col items-center justify-center gap-4 bg-[var(--bg)]">
       <button
         onClick={toggleTheme}
         className="absolute top-4 right-4 text-[var(--icon)] hover:text-[var(--text)] transition-colors cursor-pointer"
@@ -30,6 +30,10 @@ function ConnectGate() {
       <Image src={logoSrc} alt="LeAgent" width={200} height={48} priority />
 
       <div className="flex flex-col items-center gap-3">
+        <p className="text-2xl font-light tracking-wide text-[var(--text)]" style={{ opacity: 0.9 }}>
+          Cold storage. Hot trades.
+        </p>
+        <div className="mt-4 flex flex-col items-center gap-3">
         <p className="text-sm tracking-widest uppercase text-[var(--text)]" style={{ opacity: 0.8 }}>
           Connect your wallet to continue
         </p>
@@ -44,6 +48,7 @@ function ConnectGate() {
             </button>
           )}
         </ConnectButton.Custom>
+        </div>
       </div>
     </div>
   );
