@@ -430,21 +430,21 @@ export default function AgentDetailPage() {
               {deleteConfirm ? (
                 <div className="flex items-center gap-2">
                   <span
-                    className="text-[10px] tracking-widest uppercase"
+                    className="text-[11px] tracking-widest uppercase"
                     style={{ color: "var(--text-muted)" }}
                   >
                     Sure?
                   </span>
                   <button
                     onClick={() => setDeleteConfirm(false)}
-                    className="text-[10px] tracking-widest uppercase transition-colors text-[var(--text-muted)] hover:text-[var(--text)]"
+                    className="text-[11px] tracking-widest uppercase transition-colors text-[var(--text-muted)] hover:text-[var(--text)]"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={() => deleteMutation.mutate()}
                     disabled={deleteMutation.isPending}
-                    className="text-[10px] tracking-widest uppercase transition-colors disabled:opacity-50"
+                    className="text-[11px] tracking-widest uppercase transition-colors disabled:opacity-50"
                     style={{ color: "#f87171" }}
                   >
                     {deleteMutation.isPending ? "Deleting…" : "Delete"}
